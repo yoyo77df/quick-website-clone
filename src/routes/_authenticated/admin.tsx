@@ -39,13 +39,22 @@ function AdminPage() {
     const [u, p, r, c, a] = await Promise.all([
       supabase.from("profiles").select("*").order("created_at", { ascending: false }),
       supabase.from("posts").select("*, profiles!posts_user_id_fkey(username)").order("created_at", { ascending: false }),
-      supabase.from("reports").select("*, reporter:profiles!reports_reporter_id_fkey(id, username, avatar_url)").order("created_at", { ascending: false }),
+      supabase.from("reports").select("*").order("created_at", { ascending: false }),
       supabase.from("chats").select("id, user_a, user_b, created_at, ua:profiles!chats_user_a_fkey(username), ub:profiles!chats_user_b_fkey(username)").order("created_at", { ascending: false }).limit(50),
       supabase.from("messages").select("id, chat_id, content, created_at, sender:profiles!messages_sender_id_fkey(username, avatar_url), chats:chats!messages_chat_id_fkey(user_a, user_b, ua:profiles!chats_user_a_fkey(username), ub:profiles!chats_user_b_fkey(username))").eq("mentions_admin" as never, true).order("created_at", { ascending: false }).limit(100),
     ]);
+    // Hydrate reports with reporter profile (reporter_id references auth.users, not profiles)
+    const reporterIds = Array.from(new Set((r.data ?? []).map((x: any) => x.reporter_id)));
+    let reporterMap: Record<string, any> = {};
+    if (reporterIds.length) {
+      const { data: rp } = await supabase.from("profiles").select("id, username, avatar_url").in("id", reporterIds);
+      reporterMap = Object.fromEntries((rp ?? []).map((p: any) => [p.id, p]));
+    }
+    const reportsHydrated = (r.data ?? []).map((x: any) => ({ ...x, reporter: reporterMap[x.reporter_id] }));
+
     setUsers(u.data ?? []);
     setPosts(p.data ?? []);
-    setReports(r.data ?? []);
+    setReports(reportsHydrated);
     setChats(c.data ?? []);
     setAlerts(a.data ?? []);
     setStats({
