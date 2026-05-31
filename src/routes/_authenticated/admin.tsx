@@ -20,7 +20,7 @@ export const Route = createFileRoute("/_authenticated/admin")({
 });
 
 function AdminPage() {
-  const { isAdmin, loading } = useAuth();
+  const { isAdmin, loading, user } = useAuth();
   const navigate = useNavigate();
   const [tab, setTab] = useState<"settings" | "users" | "posts" | "reports" | "chats" | "alerts">("alerts");
   const [users, setUsers] = useState<any[]>([]);
