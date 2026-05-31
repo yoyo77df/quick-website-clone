@@ -109,18 +109,41 @@ function AdminPage() {
         <StatCard icon={Users} label="Users" value={stats.users} />
         <StatCard icon={FileText} label="Posts" value={stats.posts} />
         <StatCard icon={MessageSquare} label="Chats" value={stats.chats} />
-        <StatCard icon={Check} label="Online now" value={stats.online} />
+        <StatCard icon={AtSign} label="@admin alerts" value={stats.alerts} />
       </div>
 
-      <div className="flex gap-2 mb-4 border-b border-border">
-        {(["settings","users","posts","reports","chats"] as const).map((t) => (
-          <button key={t} onClick={() => setTab(t)} className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px capitalize ${tab===t?"border-primary text-foreground":"border-transparent text-muted-foreground hover:text-foreground"}`}>
-            {t}
+      <div className="flex gap-2 mb-4 border-b border-border overflow-x-auto">
+        {(["alerts","settings","users","posts","reports","chats"] as const).map((t) => (
+          <button key={t} onClick={() => setTab(t)} className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px capitalize whitespace-nowrap ${tab===t?"border-primary text-foreground":"border-transparent text-muted-foreground hover:text-foreground"}`}>
+            {t === "alerts" ? `Alerts${stats.alerts ? ` (${stats.alerts})` : ""}` : t}
           </button>
         ))}
       </div>
 
       {tab === "settings" && <SiteSettingsPanel />}
+
+      {tab === "alerts" && (
+        <div className="space-y-2">
+          {alerts.length === 0 && <p className="text-sm text-muted-foreground">No @admin mentions yet.</p>}
+          {alerts.map((m) => (
+            <div key={m.id} className="glass rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="min-w-0">
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <AtSign className="w-3.5 h-3.5 text-primary" />
+                  <span className="font-semibold text-foreground">@{m.sender?.username ?? "user"}</span>
+                  <span>in chat</span>
+                  <span className="text-foreground">{m.chats?.ua?.username} ↔ {m.chats?.ub?.username}</span>
+                  <span>· {new Date(m.created_at).toLocaleString()}</span>
+                </div>
+                <p className="text-sm mt-1 break-words">{m.content}</p>
+              </div>
+              <Link to="/chat/$chatId" params={{ chatId: m.chat_id }}>
+                <Button size="sm" className="gradient-primary text-primary-foreground"><MessageSquare className="w-3.5 h-3.5 mr-1" /> Join chat</Button>
+              </Link>
+            </div>
+          ))}
+        </div>
+      )}
 
       {tab === "users" && (
         <div className="glass rounded-xl overflow-hidden">
