@@ -20,7 +20,7 @@ export const Route = createFileRoute("/_authenticated/admin")({
 });
 
 function AdminPage() {
-  const { isAdmin, loading } = useAuth();
+  const { isAdmin, loading, user } = useAuth();
   const navigate = useNavigate();
   const [tab, setTab] = useState<"settings" | "users" | "posts" | "reports" | "chats" | "alerts">("alerts");
   const [users, setUsers] = useState<any[]>([]);
@@ -43,9 +43,18 @@ function AdminPage() {
       supabase.from("chats").select("id, user_a, user_b, created_at, ua:profiles!chats_user_a_fkey(username), ub:profiles!chats_user_b_fkey(username)").order("created_at", { ascending: false }).limit(50),
       supabase.from("messages").select("id, chat_id, content, created_at, sender:profiles!messages_sender_id_fkey(username, avatar_url), chats:chats!messages_chat_id_fkey(user_a, user_b, ua:profiles!chats_user_a_fkey(username), ub:profiles!chats_user_b_fkey(username))").eq("mentions_admin" as never, true).order("created_at", { ascending: false }).limit(100),
     ]);
+    // Hydrate reports with reporter profile (reporter_id references auth.users, not profiles)
+    const reporterIds = Array.from(new Set((r.data ?? []).map((x: any) => x.reporter_id)));
+    let reporterMap: Record<string, any> = {};
+    if (reporterIds.length) {
+      const { data: rp } = await supabase.from("profiles").select("id, username, avatar_url").in("id", reporterIds);
+      reporterMap = Object.fromEntries((rp ?? []).map((p: any) => [p.id, p]));
+    }
+    const reportsHydrated = (r.data ?? []).map((x: any) => ({ ...x, reporter: reporterMap[x.reporter_id] }));
+
     setUsers(u.data ?? []);
     setPosts(p.data ?? []);
-    setReports(r.data ?? []);
+    setReports(reportsHydrated);
     setChats(c.data ?? []);
     setAlerts(a.data ?? []);
     setStats({
@@ -87,6 +96,20 @@ function AdminPage() {
   const resolveReport = async (id: string) => {
     await supabase.from("reports").update({ status: "resolved" }).eq("id", id);
     refresh();
+  };
+
+  const messageReporter = async (reporterId: string) => {
+    if (!user) return;
+    if (reporterId === user.id) return toast.error("That's you");
+    const [a, b] = [user.id, reporterId].sort();
+    const { data: existing } = await supabase.from("chats").select("id").eq("user_a", a).eq("user_b", b).maybeSingle();
+    let chatId = existing?.id;
+    if (!chatId) {
+      const { data, error } = await supabase.from("chats").insert({ user_a: a, user_b: b }).select("id").single();
+      if (error) return toast.error(error.message);
+      chatId = data.id;
+    }
+    navigate({ to: "/chat/$chatId", params: { chatId: chatId! } });
   };
 
   if (loading || !isAdmin) return <div className="min-h-screen flex items-center justify-center"><Loader2 className="w-6 h-6 animate-spin text-primary" /></div>;
@@ -186,9 +209,30 @@ function AdminPage() {
         <div className="space-y-2">
           {reports.length === 0 && <p className="text-sm text-muted-foreground">No reports.</p>}
           {reports.map((r) => (
-            <div key={r.id} className="glass rounded-xl p-4 flex items-center justify-between">
-              <div><div className="flex items-center gap-2"><Flag className="w-4 h-4 text-destructive" /><span className="font-semibold capitalize">{r.target_type}</span><span className="text-xs text-muted-foreground">{r.status}</span></div><p className="text-sm mt-1">{r.reason}</p></div>
-              {r.status === "open" && <Button size="sm" onClick={() => resolveReport(r.id)}>Resolve</Button>}
+            <div key={r.id} className="glass rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <Flag className="w-4 h-4 text-destructive" />
+                  <span className="font-semibold capitalize">{r.target_type}</span>
+                  <span className="text-xs text-muted-foreground">{r.status}</span>
+                  {r.reporter && (
+                    <span className="text-xs text-muted-foreground flex items-center gap-1.5">
+                      · by
+                      <Avatar className="w-4 h-4"><AvatarImage src={r.reporter.avatar_url} /><AvatarFallback>{r.reporter.username?.slice(0,2).toUpperCase()}</AvatarFallback></Avatar>
+                      <span className="text-foreground">@{r.reporter.username}</span>
+                    </span>
+                  )}
+                </div>
+                <p className="text-sm mt-1 break-words">{r.reason}</p>
+              </div>
+              <div className="flex gap-2 shrink-0">
+                {r.reporter && (
+                  <Button size="sm" variant="outline" onClick={() => messageReporter(r.reporter.id)}>
+                    <MessageSquare className="w-3.5 h-3.5 mr-1" /> Message
+                  </Button>
+                )}
+                {r.status === "open" && <Button size="sm" onClick={() => resolveReport(r.id)}><Check className="w-3.5 h-3.5 mr-1" /> Resolve</Button>}
+              </div>
             </div>
           ))}
         </div>
