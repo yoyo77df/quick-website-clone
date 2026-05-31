@@ -157,7 +157,12 @@ function AdminPage() {
                   <td className="p-3"><div className="flex items-center gap-2"><Avatar className="w-7 h-7"><AvatarImage src={u.avatar_url} /><AvatarFallback>{u.username.slice(0,2).toUpperCase()}</AvatarFallback></Avatar>{u.username}</div></td>
                   <td className="p-3">{CATEGORY_LABEL[u.category as keyof typeof CATEGORY_LABEL]}</td>
                   <td className="p-3">{u.is_banned ? <span className="text-destructive">Banned</span> : u.is_online ? <span className="text-success">Online</span> : <span className="text-muted-foreground">Offline</span>}</td>
-                  <td className="p-3 text-right"><Button size="sm" variant={u.is_banned ? "secondary" : "destructive"} onClick={() => toggleBan(u.id, u.is_banned)}><Ban className="w-3 h-3 mr-1" />{u.is_banned?"Unban":"Ban"}</Button></td>
+                  <td className="p-3 text-right">
+                    <div className="flex justify-end gap-2">
+                      <Button size="sm" variant={u.is_banned ? "secondary" : "outline"} onClick={() => toggleBan(u.id, u.is_banned)}><Ban className="w-3 h-3 mr-1" />{u.is_banned?"Unban":"Ban"}</Button>
+                      <Button size="sm" variant="destructive" onClick={() => deleteUser(u.id, u.username)}><Trash2 className="w-3 h-3 mr-1" /> Delete</Button>
+                    </div>
+                  </td>
                 </tr>
               ))}
             </tbody>
