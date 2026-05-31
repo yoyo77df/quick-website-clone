@@ -73,6 +73,17 @@ function AdminPage() {
     toast.success("Deleted"); refresh();
   };
 
+  const deleteUser = async (id: string, username: string) => {
+    if (!confirm(`Permanently delete @${username}? This cannot be undone.`)) return;
+    try {
+      await deleteUserFn({ data: { userId: id } });
+      toast.success(`@${username} deleted`);
+      refresh();
+    } catch (e: any) {
+      toast.error(e?.message ?? "Failed to delete user");
+    }
+  };
+
   const resolveReport = async (id: string) => {
     await supabase.from("reports").update({ status: "resolved" }).eq("id", id);
     refresh();
