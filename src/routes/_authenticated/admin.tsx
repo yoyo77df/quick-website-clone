@@ -98,6 +98,20 @@ function AdminPage() {
     refresh();
   };
 
+  const messageReporter = async (reporterId: string) => {
+    if (!user) return;
+    if (reporterId === user.id) return toast.error("That's you");
+    const [a, b] = [user.id, reporterId].sort();
+    const { data: existing } = await supabase.from("chats").select("id").eq("user_a", a).eq("user_b", b).maybeSingle();
+    let chatId = existing?.id;
+    if (!chatId) {
+      const { data, error } = await supabase.from("chats").insert({ user_a: a, user_b: b }).select("id").single();
+      if (error) return toast.error(error.message);
+      chatId = data.id;
+    }
+    navigate({ to: "/chat/$chatId", params: { chatId: chatId! } });
+  };
+
   if (loading || !isAdmin) return <div className="min-h-screen flex items-center justify-center"><Loader2 className="w-6 h-6 animate-spin text-primary" /></div>;
 
   const StatCard = ({ icon: Icon, label, value }: any) => (
