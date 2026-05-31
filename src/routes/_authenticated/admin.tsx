@@ -1,4 +1,5 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
+import { useServerFn } from "@tanstack/react-start";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/auth";
@@ -6,12 +7,13 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Loader2, ShieldCheck, Users, FileText, MessageSquare, Flag, Ban, Check, Trash2, Settings as SettingsIcon, Save } from "lucide-react";
+import { Loader2, ShieldCheck, Users, FileText, MessageSquare, Flag, Ban, Check, Trash2, Settings as SettingsIcon, Save, AtSign } from "lucide-react";
 import { toast } from "sonner";
 import { CATEGORY_LABEL } from "@/lib/constants";
 import { doc, getDoc, setDoc } from "firebase/firestore";
 import { firestore } from "@/lib/firebase";
 import { useSiteSettings } from "@/contexts/site-settings";
+import { deleteUserAccount } from "@/lib/api/admin.functions";
 
 export const Route = createFileRoute("/_authenticated/admin")({
   component: AdminPage,
@@ -20,33 +22,38 @@ export const Route = createFileRoute("/_authenticated/admin")({
 function AdminPage() {
   const { isAdmin, loading } = useAuth();
   const navigate = useNavigate();
-  const [tab, setTab] = useState<"settings" | "users" | "posts" | "reports" | "chats">("settings");
+  const [tab, setTab] = useState<"settings" | "users" | "posts" | "reports" | "chats" | "alerts">("alerts");
   const [users, setUsers] = useState<any[]>([]);
   const [posts, setPosts] = useState<any[]>([]);
   const [reports, setReports] = useState<any[]>([]);
   const [chats, setChats] = useState<any[]>([]);
-  const [stats, setStats] = useState({ users: 0, posts: 0, online: 0, chats: 0 });
+  const [alerts, setAlerts] = useState<any[]>([]);
+  const [stats, setStats] = useState({ users: 0, posts: 0, online: 0, chats: 0, alerts: 0 });
+  const deleteUserFn = useServerFn(deleteUserAccount);
 
   useEffect(() => {
     if (!loading && !isAdmin) navigate({ to: "/dashboard", replace: true });
   }, [isAdmin, loading, navigate]);
 
   const refresh = async () => {
-    const [u, p, r, c] = await Promise.all([
+    const [u, p, r, c, a] = await Promise.all([
       supabase.from("profiles").select("*").order("created_at", { ascending: false }),
       supabase.from("posts").select("*, profiles!posts_user_id_fkey(username)").order("created_at", { ascending: false }),
       supabase.from("reports").select("*").order("created_at", { ascending: false }),
       supabase.from("chats").select("id, user_a, user_b, created_at, ua:profiles!chats_user_a_fkey(username), ub:profiles!chats_user_b_fkey(username)").order("created_at", { ascending: false }).limit(50),
+      supabase.from("messages").select("id, chat_id, content, created_at, sender:profiles!messages_sender_id_fkey(username, avatar_url), chats:chats!messages_chat_id_fkey(user_a, user_b, ua:profiles!chats_user_a_fkey(username), ub:profiles!chats_user_b_fkey(username))").eq("mentions_admin", true).order("created_at", { ascending: false }).limit(100),
     ]);
     setUsers(u.data ?? []);
     setPosts(p.data ?? []);
     setReports(r.data ?? []);
     setChats(c.data ?? []);
+    setAlerts(a.data ?? []);
     setStats({
       users: u.data?.length ?? 0,
       posts: p.data?.length ?? 0,
       online: (u.data ?? []).filter((x) => x.is_online).length,
       chats: c.data?.length ?? 0,
+      alerts: a.data?.length ?? 0,
     });
   };
 
@@ -64,6 +71,17 @@ function AdminPage() {
     const { error } = await supabase.from("posts").delete().eq("id", id);
     if (error) return toast.error(error.message);
     toast.success("Deleted"); refresh();
+  };
+
+  const deleteUser = async (id: string, username: string) => {
+    if (!confirm(`Permanently delete @${username}? This cannot be undone.`)) return;
+    try {
+      await deleteUserFn({ data: { userId: id } });
+      toast.success(`@${username} deleted`);
+      refresh();
+    } catch (e: any) {
+      toast.error(e?.message ?? "Failed to delete user");
+    }
   };
 
   const resolveReport = async (id: string) => {
@@ -91,18 +109,41 @@ function AdminPage() {
         <StatCard icon={Users} label="Users" value={stats.users} />
         <StatCard icon={FileText} label="Posts" value={stats.posts} />
         <StatCard icon={MessageSquare} label="Chats" value={stats.chats} />
-        <StatCard icon={Check} label="Online now" value={stats.online} />
+        <StatCard icon={AtSign} label="@admin alerts" value={stats.alerts} />
       </div>
 
-      <div className="flex gap-2 mb-4 border-b border-border">
-        {(["settings","users","posts","reports","chats"] as const).map((t) => (
-          <button key={t} onClick={() => setTab(t)} className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px capitalize ${tab===t?"border-primary text-foreground":"border-transparent text-muted-foreground hover:text-foreground"}`}>
-            {t}
+      <div className="flex gap-2 mb-4 border-b border-border overflow-x-auto">
+        {(["alerts","settings","users","posts","reports","chats"] as const).map((t) => (
+          <button key={t} onClick={() => setTab(t)} className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px capitalize whitespace-nowrap ${tab===t?"border-primary text-foreground":"border-transparent text-muted-foreground hover:text-foreground"}`}>
+            {t === "alerts" ? `Alerts${stats.alerts ? ` (${stats.alerts})` : ""}` : t}
           </button>
         ))}
       </div>
 
       {tab === "settings" && <SiteSettingsPanel />}
+
+      {tab === "alerts" && (
+        <div className="space-y-2">
+          {alerts.length === 0 && <p className="text-sm text-muted-foreground">No @admin mentions yet.</p>}
+          {alerts.map((m) => (
+            <div key={m.id} className="glass rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="min-w-0">
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <AtSign className="w-3.5 h-3.5 text-primary" />
+                  <span className="font-semibold text-foreground">@{m.sender?.username ?? "user"}</span>
+                  <span>in chat</span>
+                  <span className="text-foreground">{m.chats?.ua?.username} ↔ {m.chats?.ub?.username}</span>
+                  <span>· {new Date(m.created_at).toLocaleString()}</span>
+                </div>
+                <p className="text-sm mt-1 break-words">{m.content}</p>
+              </div>
+              <Link to="/chat/$chatId" params={{ chatId: m.chat_id }}>
+                <Button size="sm" className="gradient-primary text-primary-foreground"><MessageSquare className="w-3.5 h-3.5 mr-1" /> Join chat</Button>
+              </Link>
+            </div>
+          ))}
+        </div>
+      )}
 
       {tab === "users" && (
         <div className="glass rounded-xl overflow-hidden">
@@ -116,7 +157,12 @@ function AdminPage() {
                   <td className="p-3"><div className="flex items-center gap-2"><Avatar className="w-7 h-7"><AvatarImage src={u.avatar_url} /><AvatarFallback>{u.username.slice(0,2).toUpperCase()}</AvatarFallback></Avatar>{u.username}</div></td>
                   <td className="p-3">{CATEGORY_LABEL[u.category as keyof typeof CATEGORY_LABEL]}</td>
                   <td className="p-3">{u.is_banned ? <span className="text-destructive">Banned</span> : u.is_online ? <span className="text-success">Online</span> : <span className="text-muted-foreground">Offline</span>}</td>
-                  <td className="p-3 text-right"><Button size="sm" variant={u.is_banned ? "secondary" : "destructive"} onClick={() => toggleBan(u.id, u.is_banned)}><Ban className="w-3 h-3 mr-1" />{u.is_banned?"Unban":"Ban"}</Button></td>
+                  <td className="p-3 text-right">
+                    <div className="flex justify-end gap-2">
+                      <Button size="sm" variant={u.is_banned ? "secondary" : "outline"} onClick={() => toggleBan(u.id, u.is_banned)}><Ban className="w-3 h-3 mr-1" />{u.is_banned?"Unban":"Ban"}</Button>
+                      <Button size="sm" variant="destructive" onClick={() => deleteUser(u.id, u.username)}><Trash2 className="w-3 h-3 mr-1" /> Delete</Button>
+                    </div>
+                  </td>
                 </tr>
               ))}
             </tbody>
