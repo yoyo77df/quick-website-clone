@@ -22,33 +22,38 @@ export const Route = createFileRoute("/_authenticated/admin")({
 function AdminPage() {
   const { isAdmin, loading } = useAuth();
   const navigate = useNavigate();
-  const [tab, setTab] = useState<"settings" | "users" | "posts" | "reports" | "chats">("settings");
+  const [tab, setTab] = useState<"settings" | "users" | "posts" | "reports" | "chats" | "alerts">("alerts");
   const [users, setUsers] = useState<any[]>([]);
   const [posts, setPosts] = useState<any[]>([]);
   const [reports, setReports] = useState<any[]>([]);
   const [chats, setChats] = useState<any[]>([]);
-  const [stats, setStats] = useState({ users: 0, posts: 0, online: 0, chats: 0 });
+  const [alerts, setAlerts] = useState<any[]>([]);
+  const [stats, setStats] = useState({ users: 0, posts: 0, online: 0, chats: 0, alerts: 0 });
+  const deleteUserFn = useServerFn(deleteUserAccount);
 
   useEffect(() => {
     if (!loading && !isAdmin) navigate({ to: "/dashboard", replace: true });
   }, [isAdmin, loading, navigate]);
 
   const refresh = async () => {
-    const [u, p, r, c] = await Promise.all([
+    const [u, p, r, c, a] = await Promise.all([
       supabase.from("profiles").select("*").order("created_at", { ascending: false }),
       supabase.from("posts").select("*, profiles!posts_user_id_fkey(username)").order("created_at", { ascending: false }),
       supabase.from("reports").select("*").order("created_at", { ascending: false }),
       supabase.from("chats").select("id, user_a, user_b, created_at, ua:profiles!chats_user_a_fkey(username), ub:profiles!chats_user_b_fkey(username)").order("created_at", { ascending: false }).limit(50),
+      supabase.from("messages").select("id, chat_id, content, created_at, sender:profiles!messages_sender_id_fkey(username, avatar_url), chats:chats!messages_chat_id_fkey(user_a, user_b, ua:profiles!chats_user_a_fkey(username), ub:profiles!chats_user_b_fkey(username))").eq("mentions_admin", true).order("created_at", { ascending: false }).limit(100),
     ]);
     setUsers(u.data ?? []);
     setPosts(p.data ?? []);
     setReports(r.data ?? []);
     setChats(c.data ?? []);
+    setAlerts(a.data ?? []);
     setStats({
       users: u.data?.length ?? 0,
       posts: p.data?.length ?? 0,
       online: (u.data ?? []).filter((x) => x.is_online).length,
       chats: c.data?.length ?? 0,
+      alerts: a.data?.length ?? 0,
     });
   };
 
