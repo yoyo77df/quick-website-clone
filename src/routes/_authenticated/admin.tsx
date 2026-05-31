@@ -1,4 +1,5 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
+import { useServerFn } from "@tanstack/react-start";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/auth";
@@ -6,12 +7,13 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Loader2, ShieldCheck, Users, FileText, MessageSquare, Flag, Ban, Check, Trash2, Settings as SettingsIcon, Save } from "lucide-react";
+import { Loader2, ShieldCheck, Users, FileText, MessageSquare, Flag, Ban, Check, Trash2, Settings as SettingsIcon, Save, AtSign } from "lucide-react";
 import { toast } from "sonner";
 import { CATEGORY_LABEL } from "@/lib/constants";
 import { doc, getDoc, setDoc } from "firebase/firestore";
 import { firestore } from "@/lib/firebase";
 import { useSiteSettings } from "@/contexts/site-settings";
+import { deleteUserAccount } from "@/lib/api/admin.functions";
 
 export const Route = createFileRoute("/_authenticated/admin")({
   component: AdminPage,
