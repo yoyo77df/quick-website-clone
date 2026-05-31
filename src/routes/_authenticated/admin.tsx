@@ -209,9 +209,30 @@ function AdminPage() {
         <div className="space-y-2">
           {reports.length === 0 && <p className="text-sm text-muted-foreground">No reports.</p>}
           {reports.map((r) => (
-            <div key={r.id} className="glass rounded-xl p-4 flex items-center justify-between">
-              <div><div className="flex items-center gap-2"><Flag className="w-4 h-4 text-destructive" /><span className="font-semibold capitalize">{r.target_type}</span><span className="text-xs text-muted-foreground">{r.status}</span></div><p className="text-sm mt-1">{r.reason}</p></div>
-              {r.status === "open" && <Button size="sm" onClick={() => resolveReport(r.id)}>Resolve</Button>}
+            <div key={r.id} className="glass rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <Flag className="w-4 h-4 text-destructive" />
+                  <span className="font-semibold capitalize">{r.target_type}</span>
+                  <span className="text-xs text-muted-foreground">{r.status}</span>
+                  {r.reporter && (
+                    <span className="text-xs text-muted-foreground flex items-center gap-1.5">
+                      · by
+                      <Avatar className="w-4 h-4"><AvatarImage src={r.reporter.avatar_url} /><AvatarFallback>{r.reporter.username?.slice(0,2).toUpperCase()}</AvatarFallback></Avatar>
+                      <span className="text-foreground">@{r.reporter.username}</span>
+                    </span>
+                  )}
+                </div>
+                <p className="text-sm mt-1 break-words">{r.reason}</p>
+              </div>
+              <div className="flex gap-2 shrink-0">
+                {r.reporter && (
+                  <Button size="sm" variant="outline" onClick={() => messageReporter(r.reporter.id)}>
+                    <MessageSquare className="w-3.5 h-3.5 mr-1" /> Message
+                  </Button>
+                )}
+                {r.status === "open" && <Button size="sm" onClick={() => resolveReport(r.id)}><Check className="w-3.5 h-3.5 mr-1" /> Resolve</Button>}
+              </div>
             </div>
           ))}
         </div>
